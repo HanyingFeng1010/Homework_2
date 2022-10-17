@@ -1,0 +1,152 @@
+---
+title: "HW2"
+author: "Hanying Feng"
+date: "2022-10-13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(corrplot)
+library(tidyverse)
+library(tidymodels)
+```
+
+
+```{r}
+data = read.csv('homework-2/data/abalone.csv')
+```
+
+$\textbf{Question 1:}$
+
+We first add a column "age" by adding 1.5 to the column "rings".
+```{r}
+data['age'] = data['rings']+1.5
+```
+
+```{r}
+data %>% 
+  ggplot(aes(x = age)) +
+  geom_histogram(bins = 60) +
+  theme_bw()
+```
+The ages of most of the abalones in this dataset are from 6 to 14, and the histogram is right-skewed.
+
+
+$\textbf{Question 2:}$
+
+We split 80% data as training data and 20% data as testing data.
+```{r}
+set.seed(3435)
+
+data_split <- initial_split(data, prop = 0.80)
+data_train <- training(data_split)
+data_test <- testing(data_split)
+```
+
+
+$\textbf{Question 3:}$
+
+We first create a new dataframe that does not include column "rings". Because the age of abalones can be calculated directly from rings data, and it will be meaningless to use other predictors in the linear regression model.
+```{r}
+data_train_new = data_train[,c(10, 1, 2, 3, 4, 5, 6, 7, 8)]
+head(data_train_new)
+```
+
+```{r}
+data_recipe <- recipe(age ~ ., data = data_train_new) %>% 
+  step_dummy(all_nominal_predictors()) %>%
+  step_interact(terms = ~ starts_with("type"):shucked_weight
+                +longest_shell:diameter
+                +shucked_weight:shell_weight) %>%
+  step_center() %>%
+  step_scale()
+  #prep()
+
+data_recipe
+```
+
+
+$\textbf{Question 4:}$
+
+Create and store a linear regression object.
+```{r}
+lm_model <- linear_reg() %>% 
+  set_mode("regression") %>%
+  set_engine("lm")
+```
+
+
+$\textbf{Question 5:}$
+
+Set up an empty workflow, and add model and recipe.
+```{r}
+lm_wflow <- workflow() %>% 
+  add_model(lm_model) %>% 
+  add_recipe(data_recipe)
+```
+
+
+$\textbf{Question 6:}$
+
+Fit the model.
+```{r}
+lm_fit <- fit(lm_wflow, data_train_new)
+lm_fit %>% 
+  # This returns the parsnip object:
+  extract_fit_parsnip() %>% 
+  # Now tidy the linear model object:
+  tidy()
+```
+Predict the age of a hypothetical female abalone.
+```{r}
+result <- predict(lm_fit, data.frame(type = 'F', longest_shell=0.50, diameter=0.10, 
+                                     height=0.30, whole_weight=4, shucked_weight=1, 
+                                     viscera_weight=2, shell_weight=1))
+result
+```
+
+$\textbf{Question 7:}$
+
+Create a metric set.
+```{r}
+data_metrics <- metric_set(rmse, rsq, mae)
+```
+
+Create a tibble of my model’s predicted values from the training data along with the actual observed ages.
+```{r}
+data_train_res <- predict(lm_fit, new_data = data_train %>% select(-age))
+data_train_res <- bind_cols(data_train_res, data_train %>% select(age))
+head(data_train_res)
+```
+```{r}
+data_metrics(data_train_res, truth = age, 
+                estimate = .pred)
+```
+The $R^2$ is 0.5423931, which means about 54.23931% of variance in the age of abalone can be explained by the inpependent variable such as abalone's gender, longest shell, diameter and so on.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
